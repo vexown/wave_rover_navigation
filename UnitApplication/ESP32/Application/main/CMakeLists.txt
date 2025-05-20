@@ -19,9 +19,7 @@
 # - INCLUDE_DIRS: Specifies directories for header files (empty in this case)
 idf_component_register(SRCS "app_main.c"
                        INCLUDE_DIRS ""
-                       REQUIRES CAN_HAL 
-                                spi_flash 
+                       REQUIRES spi_flash 
                                 esp_common
                                 Common
-                                WiFi_AP
                       )
