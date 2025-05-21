@@ -21,6 +21,7 @@
 
 /* Project Includes */
 #include "GNSS_ublox.h"
+#include "Common.h"
 
 /*******************************************************************************/
 /*                                  MACROS                                     */
@@ -142,7 +143,7 @@ static void GNSS_UART_Rx_Task(void *pvParameters)
         {
             received_data[bytes_read] = '\0'; // Null-terminate the received data
             
-            ESP_LOGI(TAG, "Received from ublox: %s", received_data);
+            LOG("Received data from ublox module: \n\n %s\n\n", received_data);
             // Process the received data here (e.g., parse NMEA sentences, etc.) (TODO)
         }
     }
