@@ -60,6 +60,6 @@
  * 
  * @return esp_err_t ESP_OK on success, or an error code on failure.
  */
-esp_err_t GNNS_ublox_Init(void);
+esp_err_t GNSS_ublox_Init(void);
 
 #endif /* GNSS_UBLOX_H */
