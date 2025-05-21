@@ -35,6 +35,7 @@
 #include "esp_flash.h"
 #include "esp_system.h"
 #include "Common.h"
+#include "GNSS_ublox.h"
 
 /*******************************************************************************/
 /*                                 MACROS                                      */
@@ -122,6 +123,13 @@ void app_main(void)
 
     LOG("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
     /***********************************************************************************/
+
+    /******************************* Initialize Modules ********************************/
+    /* Initialize the GNSS module */
+    if(GNSS_ublox_Init() != ESP_OK) 
+    {
+        LOG("GNSS module initialization failed\n"); // for now just log it (TODO: handle it properly)
+    }
 
     /* Task loop */
     while(1) 
