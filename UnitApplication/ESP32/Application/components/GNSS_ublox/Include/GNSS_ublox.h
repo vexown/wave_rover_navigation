@@ -1,7 +1,13 @@
 /******************************************************************************
  * @file GNSS_ublox.h
- * @brief Header file for the Template component
- *
+ * @brief Header file for the GNSS ublox component.
+ * 
+ * ublox module version: NEO-M8N (on a GY-GPS6MV2 board)
+ * 
+ * Component Documentation:
+ * - GY-GPS6MV2: https://www.mantech.co.za/datasheets/products/GY-NEO6MV2.pdf?srsltid=AfmBOopySN4-ZiJYJiXr1-vGTqREfjrpNIgzLWcxbotFqheY5cvgyicB
+ * - ublox NEO-M8N: https://content.u-blox.com/sites/default/files/NEO-M8-FW3_DataSheet_UBX-15031086.pdf
+ * 
  ******************************************************************************/
 
 #ifndef GNSS_UBLOX_H
