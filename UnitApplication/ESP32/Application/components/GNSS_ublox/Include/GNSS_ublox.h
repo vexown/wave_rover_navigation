@@ -53,20 +53,13 @@
 /*******************************************************************************/
 
 /**
- * @brief Perform an action using the Template component.
- *
- * @details This is an example of to document a function that is shared across
- *          multiple files. Keep to the convention of using Doxygen style and
- *          place them above the function declaration.
- *
- * @param[in] input_data Input data for the action.
- * @param[out] output_data Pointer to store the result.
- *
- * @return
- *      - ESP_OK on success
- *      - ESP_ERR_INVALID_ARG if input parameters are invalid
- *      - Other esp_err_t codes as needed
+ * @brief Initialize the GNSS ublox module.
+ * 
+ * This function initializes the GNSS ublox module by configuring the UART
+ * settings and starting the UART task for communication.
+ * 
+ * @return esp_err_t ESP_OK on success, or an error code on failure.
  */
-// esp_err_t GNSS_ublox_perform_action(int input_data, int* output_data);
+esp_err_t GNNS_ublox_Init(void);
 
 #endif /* GNSS_UBLOX_H */
