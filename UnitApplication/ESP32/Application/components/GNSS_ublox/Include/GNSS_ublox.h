@@ -7,6 +7,7 @@
  * Component Documentation:
  * - GY-GPS6MV2: https://www.mantech.co.za/datasheets/products/GY-NEO6MV2.pdf?srsltid=AfmBOopySN4-ZiJYJiXr1-vGTqREfjrpNIgzLWcxbotFqheY5cvgyicB
  * - ublox NEO-M8N: https://content.u-blox.com/sites/default/files/NEO-M8-FW3_DataSheet_UBX-15031086.pdf
+ * - ublox M8 Receiver Description Including Protocol Specification: https://content.u-blox.com/sites/default/files/products/documents/u-blox8-M8_ReceiverDescrProtSpec_UBX-13003221.pdf?utm_content=UBX-13003221
  * 
  ******************************************************************************/
 
