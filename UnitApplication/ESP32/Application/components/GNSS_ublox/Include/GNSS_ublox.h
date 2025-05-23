@@ -4,10 +4,42 @@
  * 
  * ublox module version: NEO-M8N (on a GY-GPS6MV2 board)
  * 
+ * ******************************************************************************
  * Component Documentation:
  * - GY-GPS6MV2: https://www.mantech.co.za/datasheets/products/GY-NEO6MV2.pdf?srsltid=AfmBOopySN4-ZiJYJiXr1-vGTqREfjrpNIgzLWcxbotFqheY5cvgyicB
  * - ublox NEO-M8N: https://content.u-blox.com/sites/default/files/NEO-M8-FW3_DataSheet_UBX-15031086.pdf
  * - ublox M8 Receiver Description Including Protocol Specification: https://content.u-blox.com/sites/default/files/products/documents/u-blox8-M8_ReceiverDescrProtSpec_UBX-13003221.pdf?utm_content=UBX-13003221
+ * ******************************************************************************
+ * NMEA Protocol Frame Structure:
+ * 
+ * 1.  Start character:
+ *      - Always '$'
+ *
+ * 2.  Address field:
+ *      - Contains only digits and uppercase letters.
+ *      - Cannot be null.
+ *      - Subdivided into two sub-fields:
+ *          a. Talker Identifier (<XX>):
+ *              - GP for GPS, GL for GLONASS, GA for Galileo, etc.
+ *          b. Sentence Formatter (<XXX>):
+ *              - Defines the message content: ZDA for time and date, GGA for fix data, etc.
+ *              - See "Messages overview" in the ublox M8 Receiver Description document for full list.
+ * 
+ * 3.  Data field(s):
+ *      - Delimited by a ','.
+ *      - Length can vary, even for a certain field. Refer to the ublox M8 Receiver Description document for details.
+ *
+ * 4.  Checksum field:
+ *      - Starts with a '*' character.
+ *      - Followed by 2 characters representing a hexadecimal number.
+ *      - The checksum is the exclusive OR (XOR) of all characters between '$' and '*'.
+ *      - Checksum range: Address field + Data field(s).
+ *
+ * 5.  End sequence:
+ *      - Always '<CR><LF>' (Carriage Return and Line Feed).
+ *
+ * Example:
+ * $  GP  ZDA  ,141644.00,22,03,2002,00,00  *67  <CR><LF>
  * 
  ******************************************************************************/
 
