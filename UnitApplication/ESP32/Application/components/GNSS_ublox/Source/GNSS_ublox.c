@@ -291,17 +291,22 @@ static void process_NMEA_sentence(char *sentence, int length)
 
 static void process_GGA_sentence(char *sentence) 
 {
+    /* Copy the NMEA sentence to a new buffer - this is needed because strtok modifies the input string */
+    char gga_sentence[NMEA_MAX_SENTENCE_LENGTH];
+    strncpy(gga_sentence, sentence, NMEA_MAX_SENTENCE_LENGTH - 1); // -1 to leave space for null-terminator
+    gga_sentence[NMEA_MAX_SENTENCE_LENGTH - 1] = '\0'; // Ensure null-termination
+
     /* Check for the GGA message type */
-    char* gga_start = strstr(sentence, "$GNGGA"); // Check for the GN first (GNA is any combination of GNSS systems, including GPS, GLONASS, Galileo, and BeiDou)
+    char* gga_start = strstr(gga_sentence, "$GNGGA"); // Check for the GN first (GNA is any combination of GNSS systems, including GPS, GLONASS, Galileo, and BeiDou)
     if (gga_start == NULL) 
     {
-        gga_start = strstr(sentence, "$GAGGA"); // Check for Galileo second (the European GNSS system)
+        gga_start = strstr(gga_sentence, "$GAGGA"); // Check for Galileo second (the European GNSS system)
         if(gga_start == NULL) 
         {
-            gga_start = strstr(sentence, "$GLGGA"); // Check for GLONASS third (the Russian GNSS system)
+            gga_start = strstr(gga_sentence, "$GLGGA"); // Check for GLONASS third (the Russian GNSS system)
             if(gga_start == NULL) 
             {
-                ESP_LOGI(TAG, "No GGA message found in the received data."); 
+                return; // If no GGA message found, exit the function
             }
         }
     }
@@ -309,25 +314,29 @@ static void process_GGA_sentence(char *sentence)
     /* Parse the GGA message if found */
     if (gga_start != NULL)
     {
-        ESP_LOGI(TAG, "GGA message found: %s", gga_start);
-
         char *current_token;
-        int field_idx = 0; // 0 for message ID, 1 for Time, 2 for Latitude, etc.
+        int field_idx = 0; // 0 for message ID, 1 for Time, 2 for Latitude, etc. (see ublox M8 Receiver Description document for GGA fields)
 
-        // The first token is the message ID itself (e.g., "$GNGGA")
-        current_token = strtok(gga_start, ",");
+        /** strtok will replace the first comma it finds with a null terminator. It then returns pointer to the beginning of the created token.
+         *  Subsequent calls to strtok with NULL will continue tokenizing the same string, using the same delimiter (comma in this case).
+         *  The first token is the message ID itself (e.g., "$GNGGA"). 
+         *  Example of GGA sentence so you can imagine the tokens: 
+         *  $GNGGA,120337.00,5138.14222,N,01757.96508,E,2,12,0.78,148.9,M,38.6,M,,0000*4E 
+         */
+        current_token = strtok(gga_start, ","); 
 
-        // Loop through subsequent data fields
-        // GGA has up to 14 data fields after the ID (Fields 1-14)
-        while (current_token != NULL && field_idx < 14)
+        /* Loop through the tokens in the GGA sentence */
+        while (current_token != NULL && field_idx < 14) // 14 is the maximum number of fields in a GGA sentence (not counting checksum and CRLF)
         {
-            current_token = strtok(NULL, ","); // Get the next data field
-            if (current_token == NULL || *current_token == '*') // End of sentence (checksum) or no more tokens
+            /* Get the next token and check if it's valid for processing */
+            current_token = strtok(NULL, ","); // Find the next token/field in the GGA sentence
+            if (current_token == NULL || *current_token == '*') // No more tokens or the token is a checksum (starts with '*')             
             {
-                break;
+                break; // All tokens have been processed or we reached the checksum, exit the loop
             }
-            field_idx++; // Increment for the current data field index
+            field_idx++; // Field contains data, count it
 
+            /* Process the current token based on its field index */
             switch (field_idx)
             {
                 case 1: // Field 1: Time (hhmmss.ss) - TODO
