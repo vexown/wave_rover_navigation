@@ -85,7 +85,31 @@
  */
 static void uart_rx_task(void *pvParameters);
 
-static double convert_nmea_to_decimal_degrees(const char* nmea_coord, char indicator);
+/**
+ * @brief Converts NMEA coordinates to decimal degrees.
+ *
+ * @param nmea_coord Pointer to the NMEA coordinate string (e.g., "1234.5678").
+ * @param indicator 'N' or 'S' for latitude, 'E' or 'W' for longitude.
+ * @return The converted coordinate in decimal degrees.
+ * 
+ * Notes: - The NMEA standard coordinate format is in Degrees, Minutes, and Decimal Minutes (DMM) 
+ *        - According to the u-blox M8 Receiver Description, the format is as follows:
+ *              - Latitude:  "ddmm.mmmm" (degrees, minutes, and decimal minutes)
+ *              - Longitude: "dddmm.mmmm" (degrees, minutes, and decimal minutes)
+ *         - To convert to Degrees and Fractions of Degrees, or Degrees, Minutes, Seconds and Fractions of seconds, 
+ *           the 'Minutes' and 'Fractional Minutes' parts need to be converted. 
+ *           In other words: 
+ *              If the GPS Receiver reports a Latitude of 4717.112671 North and Longitude of 00833.914843 East, this is:
+ *                  - Latitude 47 Degrees, 17.112671 Minutes
+ *                  - Longitude 8 Degrees, 33.914843 Minutes
+ *              or:
+ *                  - Latitude 47 Degrees, 17 Minutes, 6.76026 Seconds
+ *                  - Longitude 8 Degrees, 33 Minutes, 54.89058 Seconds
+ *              or:
+ *                  - Latitude 47.28521118 Degrees
+ *                  - Longitude 8.56524738 Degrees
+ */
+static double convert_coordinates_to_decimal_degrees(const char* nmea_coord, char indicator);
 
 static void process_NMEA_sentence(char *sentence, int length);
 
@@ -252,33 +276,79 @@ static void uart_rx_task(void *pvParameters)
     vTaskDelete(NULL); // should never reach here but just in case
 }
 
-// Helper function to convert NMEA latitude/longitude format (DDMM.MMMMM) to decimal degrees
-static double convert_nmea_to_decimal_degrees(const char* nmea_coord, char indicator) 
+static double convert_coordinates_to_decimal_degrees(const char* nmea_coord, char indicator) 
 {
-    double degrees;
-    double minutes;
+    /* Validate the input NMEA coordinate and indicator */
+    if (!nmea_coord || strlen(nmea_coord) < 5 || 
+        (indicator != 'N' && indicator != 'S' && indicator != 'E' && indicator != 'W')) 
+    {
+        ESP_LOGE(TAG, "Invalid NMEA coordinate or indicator: %s, %c", nmea_coord, indicator);
+        return 0.0; // Invalid input or indicator
+    }
+
+    /* Locate the dot in the NMEA coordinate string. */
+    /* The dot is expected to be present and in correct position for the format "DDMM.MMMM" or "DDDMM.MMMM" */
     char* dot = strchr(nmea_coord, '.');
     if (dot == NULL) 
     {
-        return 0.0; // Invalid format
+        ESP_LOGE(TAG, "Invalid NMEA coordinate format (no decimal point): %s", nmea_coord);
+        return 0.0; // Invalid format (no decimal point)
+    }
+    int chars_before_dot = dot - nmea_coord;
+    if ((indicator == 'N' || indicator == 'S') && chars_before_dot != 4) 
+    {
+        ESP_LOGE(TAG, "Invalid NMEA coordinate format for latitude (expected 4 characters before dot, got %d): %s", chars_before_dot, nmea_coord);
+        return 0.0; // Latitude must have exactly 4 characters before dot (ddmm)
+    }
+    if ((indicator == 'E' || indicator == 'W') && chars_before_dot != 5) 
+    {
+        ESP_LOGE(TAG, "Invalid NMEA coordinate format for longitude (expected 5 characters before dot, got %d): %s", chars_before_dot, nmea_coord);
+        return 0.0; // Longitude must have exactly 5 characters before dot (dddmm)
     }
 
-    // Extract degrees (before MM.MMMMM)
-    char deg_str[4]; // Max 3 digits for degrees (DDD)
-    strncpy(deg_str, nmea_coord, dot - nmea_coord - 2);
-    deg_str[dot - nmea_coord - 2] = '\0';
-    degrees = atof(deg_str);
+    /* Extract degrees */
+    char deg_str[4]; // Buffer to hold the degrees part of the coordinate. Enough for 3 digits + null terminator
+    int deg_len = 0; // Degrees are 2 characters for latitude (dd) or 3 characters for longitude (ddd) before the dot
+    if (indicator == 'N' || indicator == 'S') 
+    {
+        deg_len = 2; // Latitude: 2 digits
+    } 
+    else if (indicator == 'E' || indicator == 'W') 
+    {
+        deg_len = 3; // Longitude: 3 digits
+    }
+    strncpy(deg_str, nmea_coord, deg_len); // Copy the degrees part from the NMEA coordinate
+    deg_str[deg_len] = '\0';
+    char* endptr;
+    double degrees = strtod(deg_str, &endptr); // strtod converts the string to double and sets endptr to the first character after the number (a bit more advanced than atof)
+    if ((*endptr != '\0') || (degrees < 0) || 
+        ((indicator == 'N' || indicator == 'S') && degrees > 90) || 
+        ((indicator == 'E' || indicator == 'W') && degrees > 180)) 
+    {
+        ESP_LOGE(TAG, "Invalid degrees in NMEA coordinate: %s, indicator: %c", nmea_coord, indicator);
+        return 0.0; // Invalid degrees
+    }
 
-    // Extract minutes (MM.MMMMM)
-    minutes = atof(dot - 2);
+    /* Extract minutes */
+    /* Minutes always start 2 characters before the dot, in both latitude (DDMM.MMMM) and longitude (DDDMM.MMMM) formats so it's easier than degrees */
+    /* And yes, we do include the dot since we are extracting both minutes and fractional minutes */
+    double minutes = strtod(dot - 2, &endptr); 
+    if ((*endptr != '\0') || (minutes < 0) || (minutes >= 60)) 
+    {
+        ESP_LOGE(TAG, "Invalid minutes in NMEA coordinate: %s, indicator: %c", nmea_coord, indicator);
+        return 0.0; // Invalid minutes
+    }
 
+    /* Compose the decimal degrees using the extracted degrees and minutes */
     double decimal_degrees = degrees + (minutes / 60.0);
 
-    // Apply sign based on indicator (N/S for latitude, E/W for longitude)
+    /* Adjust the sign based on the indicator */
     if (indicator == 'S' || indicator == 'W') 
     {
         decimal_degrees *= -1.0;
     }
+
+    /* Return the converted coordinate in decimal degrees */
     return decimal_degrees;
 }
 
