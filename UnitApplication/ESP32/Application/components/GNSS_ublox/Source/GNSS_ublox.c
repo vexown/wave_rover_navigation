@@ -45,7 +45,7 @@
 #define UART_INTERRUPT_ALLOC_FLAGS 0
 
 /* UART RX task configuration */
-#define UART_RX_TASK_STACK_SIZE 2048 // in bytes (not words like in "normal" FreeRTOS)
+#define UART_RX_TASK_STACK_SIZE 4096 // in bytes (not words like in "normal" FreeRTOS)
 #define UART_RX_TASK_PRIORITY (tskIDLE_PRIORITY + 1)
 #define UART_RX_TIMEOUT_IN_TICKS pdMS_TO_TICKS(20) // 20 ms timeout for UART read
 
