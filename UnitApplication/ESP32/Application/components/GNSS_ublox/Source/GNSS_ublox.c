@@ -49,6 +49,10 @@
 #define UART_RX_TASK_PRIORITY (tskIDLE_PRIORITY + 1)
 #define UART_RX_TIMEOUT_IN_TICKS pdMS_TO_TICKS(20) // 20 ms timeout for UART read
 
+/* Macros related to NMEA sentences */
+#define NMEA_MAX_SENTENCE_LENGTH 512 // Maximum length of a NMEA sentence (as per our assumption, can be adjusted later)
+#define NMEA_MAX_SENTENCES 5 // Maximum number of NMEA sentences to store in the buffer
+
 /*******************************************************************************/
 /*                                DATA TYPES                                   */
 /*******************************************************************************/
@@ -83,7 +87,7 @@ static void uart_rx_task(void *pvParameters);
 
 static double convert_nmea_to_decimal_degrees(const char* nmea_coord, char indicator);
 
-static void process_NMEA_sentence(uint8_t *data, int length);
+static void process_NMEA_sentence(char *sentence, int length);
 
 static void process_GGA_sentence(char *sentence);
 
@@ -145,7 +149,14 @@ esp_err_t GNSS_ublox_init(void)
 static void uart_rx_task(void *pvParameters)
 {
     /******************** Task Initialization ********************/
-    static uint8_t received_data[UART_RX_BUF_SIZE]; // reuse the buffer size of rx ring buffer but IT IS NOT the same buffer
+    /* According to C.12 NMEA Protocol Settings (UBX-CFG-NMEA) in ublox M8 Receiver Description document,
+       by default flags-limit82 is set to 0, which means the length of the NMEA sentences is not limited to 82 characters.
+       For now I will allocate 512 bytes per NMEA sentence, but I may adjust this later based on the actual data received (TODO). */
+    static char received_NMEA_sentences[NMEA_MAX_SENTENCES][NMEA_MAX_SENTENCE_LENGTH];
+    static char temp_sentence_buffer[NMEA_MAX_SENTENCE_LENGTH]; // Temporary buffer for reading sentences
+    static uint8_t current_NMEA_sentence_index = 0; // Index for the current NMEA sentence being processed
+    static uint32_t bytes_in_the_temp_buffer = 0; // Number of bytes currently in the temporary buffer
+    static bool unprocessed_data_in_the_buffer = false;
 
     ESP_LOGI(TAG, "GNSS UART RX task started.");
 
@@ -153,15 +164,88 @@ static void uart_rx_task(void *pvParameters)
     while (1) 
     {
         /* Read data from the UART RX buffer to the local buffer */
-        int bytes_read = uart_read_bytes(UART_NUM, received_data, (UART_RX_BUF_SIZE - 1), UART_RX_TIMEOUT_IN_TICKS);
+        int bytes_read = uart_read_bytes(UART_NUM, 
+                                         temp_sentence_buffer + bytes_in_the_temp_buffer, // Read into the free space in the temporary buffer
+                                         sizeof(temp_sentence_buffer) - bytes_in_the_temp_buffer - 1, // Don't read more than the remaining space in the buffer (-1 for /0)
+                                         UART_RX_TIMEOUT_IN_TICKS); // Wait for up to UART_RX_TIMEOUT_IN_TICKS ticks for data to be available
 
-        if (bytes_read > 0) 
+        if (bytes_read > 0)
         {
-            received_data[bytes_read] = '\0'; // Null-terminate the received data
+            unprocessed_data_in_the_buffer = true; // Set the flag to indicate that data was received and needs processing
             
-            LOG("Received data from ublox module: \n\n %s\n\n", received_data);
-            
-            process_NMEA_sentence(received_data, bytes_read); // Process the received NMEA sentence
+            bytes_in_the_temp_buffer += bytes_read; // Update the number of received bytes in the temporary buffer
+
+            temp_sentence_buffer[bytes_in_the_temp_buffer] = '\0'; // Null-terminate the temporary buffer to treat it as a string
+        }
+        else if (bytes_read < 0) 
+        {
+            ESP_LOGE(TAG, "Error reading from UART: %d", bytes_read);
+        }
+        else /* bytes_read == 0 */
+        {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Wait for 100 ms before trying to read again
+        }
+
+        while ((bytes_in_the_temp_buffer > 0) && (unprocessed_data_in_the_buffer)) 
+        {   
+            /* Check if the received data contains a complete NMEA sentence */
+            /* According to the NMEA standard (and u-blox M8 Receiver description), sentences are terminated by a carriage return and line feed (CRLF) */
+            char *end_of_sentence = strstr(temp_sentence_buffer, "\r\n"); 
+            if (end_of_sentence != NULL)
+            {
+                end_of_sentence += 2; // Add 2 to account for CRLF
+                /* Calculate the length of the complete NMEA sentence */
+                int sentence_length = end_of_sentence - temp_sentence_buffer;
+
+                /* Copy the complete NMEA sentence to the received sentences array */
+                /* We don't check the sentence length here because we already limit the length in uart_read_bytes() */
+                if (current_NMEA_sentence_index < NMEA_MAX_SENTENCES) 
+                {
+                    bytes_in_the_temp_buffer -= sentence_length; // Decrease bytes_in_the_temp_buffer by the length of the complete sentence
+
+                    strncpy(received_NMEA_sentences[current_NMEA_sentence_index], temp_sentence_buffer, sentence_length);
+                    received_NMEA_sentences[current_NMEA_sentence_index][sentence_length] = '\0'; // Null-terminate the string
+
+                    ESP_LOGI(TAG, "Received NMEA Sentence: %s", received_NMEA_sentences[current_NMEA_sentence_index]);
+
+                    /* Process the received NMEA sentence */
+                    process_NMEA_sentence(received_NMEA_sentences[current_NMEA_sentence_index], sentence_length);
+
+                    /* Move to the next index for the next NMEA sentence or reset if we reach the maximum */
+                    current_NMEA_sentence_index++;
+                    if (current_NMEA_sentence_index >= NMEA_MAX_SENTENCES) 
+                    {
+                        ESP_LOGW(TAG, "Maximum number of NMEA sentences reached. Resetting index.");
+                        current_NMEA_sentence_index = 0; // Reset index if we reach the maximum number of sentences
+                    }
+                }
+                else 
+                {
+                    /* This should never happen since in the if condition we reset the index if it reaches the maximum but just in case */
+                    ESP_LOGW(TAG, "Received more NMEA sentences than expected. Resetting index -- this condition should not occur, investigate why it did.");
+                    current_NMEA_sentence_index = 0; // Reset index if we reach the maximum number of sentences
+                }
+
+                /* Remove the processed sentence from the temporary buffer and shift the remaining data to the front (if any) */
+                if (bytes_in_the_temp_buffer > 0) 
+                {
+                    memmove(temp_sentence_buffer, end_of_sentence, bytes_in_the_temp_buffer); // Shift remaining data to the front
+                    temp_sentence_buffer[bytes_in_the_temp_buffer] = '\0'; // Null-terminate the remaining data
+                }
+                else 
+                {
+                    /* There is no more data to process in the temporary buffer, loop will exit to wait for more data */
+                    unprocessed_data_in_the_buffer = false;
+                    temp_sentence_buffer[0] = '\0';
+                }
+            }
+            else 
+            {
+                ESP_LOGD(TAG, "Partial NMEA sentence received: %s", temp_sentence_buffer);
+                /* If we reach here, it means we have not found a complete NMEA sentence yet */
+                /* The loop will exit and wait for more data to be received to gather a complete sentence */
+                unprocessed_data_in_the_buffer = false;
+            }
         }
     }
 
@@ -198,14 +282,11 @@ static double convert_nmea_to_decimal_degrees(const char* nmea_coord, char indic
     return decimal_degrees;
 }
 
-static void process_NMEA_sentence(uint8_t *data, int length) 
+static void process_NMEA_sentence(char *sentence, int length) 
 {
-    /* Cast the uint8_t data to char for string manipulation (should be safe regardless the sign of char, regular character set ends at 127 anyway) */
-    char *sentence = (char *)data;
-
+    /* Process different types of NMEA sentences */
     process_GGA_sentence(sentence);
-
-
+    // Add more processing functions for other NMEA sentence types as needed (TODO)
 }
 
 static void process_GGA_sentence(char *sentence) 
@@ -270,8 +351,7 @@ static void process_GGA_sentence(char *sentence)
                         }
                     }
                     break;
-                case 3: // Field 3: N/S Indicator
-                    // This field is already handled in the case for Field 2 (Latitude)
+                case 3: // Field 3: N/S Indicator - This field is already handled in the case for Field 2 (Latitude)
                     break;
                 case 4: // Field 4: Longitude (DDDMM.MMMMM)
                     if (strlen(current_token) > 0)
@@ -291,22 +371,17 @@ static void process_GGA_sentence(char *sentence)
                         }
                     }
                     break;
-                case 6: // Field 6: Quality Indicator
-                    // if (strlen(current_token) > 0) { FixQuality = atoi(current_token); }
+                case 6: // Field 6: Quality Indicator - TODO
                     break;
-                case 7: // Field 7: Number of Satellites
-                    // if (strlen(current_token) > 0) { SatellitesUsed = atoi(current_token); }
+                case 7: // Field 7: Number of Satellites - TODO
                     break;
-                case 8: // Field 8: HDOP
-                    // if (strlen(current_token) > 0) { HDOP = atof(current_token); }
+                case 8: // Field 8: HDOP - TODO
                     break;
                 case 9: // Field 9: Altitude (Meters)
                     if (strlen(current_token) > 0)
                     {
                         Altitude = atof(current_token);
                         ESP_LOGI(TAG, "Altitude: %f", Altitude);
-                        // Note: Field 10 is Altitude Unit (M), which is consumed by the next strtok call
-                        // at the beginning of the loop if not explicitly handled here.
                     }
                     break;
                 case 10: // Field 10: Altitude Unit (M) - This field is not needed for processing, just skip it
