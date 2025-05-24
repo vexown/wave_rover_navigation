@@ -79,7 +79,7 @@
  *
  * @param pvParameters Parameters passed to the task (not used).
  */
-static void GNSS_UART_Rx_Task(void *pvParameters);
+static void uart_rx_task(void *pvParameters);
 
 static double convert_nmea_to_decimal_degrees(const char* nmea_coord, char indicator);
 
@@ -99,7 +99,7 @@ static double Altitude = 0.0;
 /*                     GLOBAL FUNCTION DEFINITIONS                             */
 /*******************************************************************************/
 
-esp_err_t GNSS_ublox_Init(void)
+esp_err_t GNSS_ublox_init(void)
 {
     /* Define the UART configuration according to the ublox module's requirements */
     uart_config_t uart_config = 
@@ -115,24 +115,26 @@ esp_err_t GNSS_ublox_Init(void)
     /* Apply the defined UART configuration */
     ESP_ERROR_CHECK(uart_param_config(UART_NUM, &uart_config));
 
-    /* Set UART pins (TX, RX, RTS, CTS) and the UART port number */
+    /* Set UART pins (TX, RX, RTS, CTS) and the UART port number according to our physical connections */
     /* Note: RTS and CTS are not used in this case, so we set them to UART_PIN_NO_CHANGE */
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM, UART_TX_PIN, UART_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-    
+    /* "Installing" the driver involves allocating necessary memory for the driver's internal structures (like RX/TX buffers and 
+        an event queue if specified), initializing these structures, setting up the UART hardware (enabling the module and 
+        configuring interrupts), and preparing it for communication. */
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM, UART_RX_BUF_SIZE, UART_TX_BUF_SIZE, UART_EVENT_QUEUE_SIZE, NULL, UART_INTERRUPT_ALLOC_FLAGS));
 
     /* Create a task to handle UART data from the GNSS module */
-    BaseType_t status = xTaskCreate(GNSS_UART_Rx_Task, "GNSS_UART_Rx_Task", UART_RX_TASK_STACK_SIZE, NULL, UART_RX_TASK_PRIORITY, NULL);
+    BaseType_t status = xTaskCreate(uart_rx_task, "uart_rx_task", UART_RX_TASK_STACK_SIZE, NULL, UART_RX_TASK_PRIORITY, NULL);
     if (status != pdPASS) 
     {
         ESP_LOGE(TAG, "Failed to create GNSS UART RX task");
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "GNSS_ublox_Init completed and UART RX task started.");
+    ESP_LOGI(TAG, "GNSS_ublox_init completed and UART RX task started.");
 
-    /* If we reach here, the initialization was successful (otherwise ESP_ERROR_CHECK logs the error and aborts) */
+    /* If we reach here, the initialization was successful (otherwise ESP_ERROR_CHECK logs the error and aborts or we return with ESP_FAIL) */
     return ESP_OK; 
 }
 
@@ -140,7 +142,7 @@ esp_err_t GNSS_ublox_Init(void)
 /*                     STATIC FUNCTION DEFINITIONS                             */
 /*******************************************************************************/
 
-static void GNSS_UART_Rx_Task(void *pvParameters)
+static void uart_rx_task(void *pvParameters)
 {
     /******************** Task Initialization ********************/
     static uint8_t received_data[UART_RX_BUF_SIZE]; // reuse the buffer size of rx ring buffer but IT IS NOT the same buffer

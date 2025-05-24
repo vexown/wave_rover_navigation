@@ -86,13 +86,15 @@
 /*******************************************************************************/
 
 /**
- * @brief Initialize the GNSS ublox module.
+ * @brief Initialize the communication with the GNSS ublox module.
  * 
- * This function initializes the GNSS ublox module by configuring the UART
- * settings and starting the UART task for communication.
+ * This function performs configuration of the UART interface, sets up the necessary
+ * pins, and installs the UART driver. It also creates a FreeRTOS task to handle
+ * incoming data from the GNSS module.
  * 
- * @return esp_err_t ESP_OK on success, or an error code on failure.
+ * @return esp_err_t ESP_OK on success. If the function fails the program will abort via ESP_ERROR_CHECK
+ *         and log the error message. There is also a chance of returning ESP_FAIL if the task creation fails.
  */
-esp_err_t GNSS_ublox_Init(void);
+esp_err_t GNSS_ublox_init(void);
 
 #endif /* GNSS_UBLOX_H */

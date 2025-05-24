@@ -126,7 +126,7 @@ void app_main(void)
 
     /******************************* Initialize Modules ********************************/
     /* Initialize the GNSS module */
-    if(GNSS_ublox_Init() != ESP_OK) 
+    if(GNSS_ublox_init() != ESP_OK) 
     {
         LOG("GNSS module initialization failed\n"); // for now just log it (TODO: handle it properly)
     }
