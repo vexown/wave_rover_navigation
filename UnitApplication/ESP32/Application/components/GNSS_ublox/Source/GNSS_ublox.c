@@ -122,6 +122,13 @@ static void process_GGA_sentence(char *sentence);
 static double Latitude = 0.0;
 static double Longitude = 0.0;
 static double Altitude = 0.0;
+static double Time_UTC = 0.0;
+static int QualityIndicator = 0;
+static int NumberOfSatellites = 0;
+static double HorizontalDilutionOfPrecision = 0.0;
+static double GeoidalSeparation = 0.0;
+static double AgeOfDifferentialGPSData = 0.0;
+static int DifferentialReferenceStationID = 0;
 
 /*******************************************************************************/
 /*                     GLOBAL FUNCTION DEFINITIONS                             */
@@ -384,8 +391,11 @@ static void process_GGA_sentence(char *sentence)
     /* Parse the GGA message if found */
     if (gga_start != NULL)
     {
+        /* Temporary variables for parsing */
         char *current_token;
         int field_idx = 0; // 0 for message ID, 1 for Time, 2 for Latitude, etc. (see ublox M8 Receiver Description document for GGA fields)
+        char latitude_value_str[32] = {0}; // Buffer to hold latitude value string (DDMM.MMMMM format)
+        char longitude_value_str[32] = {0}; // Buffer to hold longitude value string (DDDMM.MMMMM format)
 
         /** strtok will replace the first comma it finds with a null terminator. It then returns pointer to the beginning of the created token.
          *  Subsequent calls to strtok with NULL will continue tokenizing the same string, using the same delimiter (comma in this case).
@@ -406,72 +416,119 @@ static void process_GGA_sentence(char *sentence)
             }
             field_idx++; // Field contains data, count it
 
+            /* Check if the current token is empty. In NMEA sentences, some fields can be empty (e.g., no fix available) 
+             * In a raw NMEA sentence, this would be represented as commas with no data between them (e.g., "123456.00,,N,01234.56789,E,...") */
+            if(strlen(current_token) == 0) 
+            {
+                continue; // Skip empty fields
+            }
+
             /* Process the current token based on its field index */
             switch (field_idx)
             {
-                case 1: // Field 1: Time (hhmmss.ss) - TODO
-                    // ESP_LOGI(TAG, "Time: %s", current_token);
+                case 1: // Field 1: Time (hhmmss.ss)
+                    Time_UTC = atof(current_token); // Convert time to double
+                    ESP_LOGI(TAG, "Time (UTC) hhmmss.ss: %f", Time_UTC);
                     break;
+
                 case 2: // Field 2: Latitude (DDMM.MMMMM)
-                    if (strlen(current_token) > 0)
-                    {
-                        char *indicator_token = strtok(NULL, ","); // This should be Field 3: N/S Indicator
-                        if (indicator_token != NULL && strlen(indicator_token) > 0 && *indicator_token != '*')
-                        {
-                            Latitude = convert_nmea_to_decimal_degrees(current_token, indicator_token[0]);
-                            ESP_LOGI(TAG, "Latitude: %f", Latitude);
-                            field_idx++; // Consumed indicator token (Field 3)
-                            current_token = indicator_token; // Update current_token to the last processed token for the while loop condition
-                        }
-                        else
-                        {
-                            ESP_LOGW(TAG, "Latitude N/S indicator missing or invalid.");
-                            current_token = NULL; // Stop processing due to malformed sentence
-                        }
-                    }
+                    strncpy(latitude_value_str, current_token, sizeof(latitude_value_str) - 1); // Copy latitude value to the buffer
+                    latitude_value_str[sizeof(latitude_value_str) - 1] = '\0'; // Ensure null-termination
                     break;
-                case 3: // Field 3: N/S Indicator - This field is already handled in the case for Field 2 (Latitude)
+
+                case 3: // Field 3: N/S Indicator
+                    char indicator = current_token[0]; // Get the N/S indicator (N or S)
+                    ESP_LOGI(TAG, "N/S Indicator: %c", indicator); // Log the N/S indicator for debugging
+                    Latitude = convert_coordinates_to_decimal_degrees(latitude_value_str, indicator);
+                    ESP_LOGI(TAG, "Latitude [degrees]: %f", Latitude);
                     break;
+
                 case 4: // Field 4: Longitude (DDDMM.MMMMM)
-                    if (strlen(current_token) > 0)
-                    {
-                        char *indicator_token = strtok(NULL, ","); // This should be Field 5: E/W Indicator
-                        if (indicator_token != NULL && strlen(indicator_token) > 0 && *indicator_token != '*')
-                        {
-                            Longitude = convert_nmea_to_decimal_degrees(current_token, indicator_token[0]);
-                            ESP_LOGI(TAG, "Longitude: %f", Longitude);
-                            field_idx++; // Consumed indicator token (Field 5)
-                            current_token = indicator_token; // Update current_token
-                        }
-                        else
-                        {
-                            ESP_LOGW(TAG, "Longitude E/W indicator missing or invalid.");
-                            current_token = NULL; // Stop processing
-                        }
-                    }
+                    strncpy(longitude_value_str, current_token, sizeof(longitude_value_str) - 1); // Copy longitude value to the buffer
+                    longitude_value_str[sizeof(longitude_value_str) - 1] = '\0'; // Ensure null-termination
                     break;
-                case 6: // Field 6: Quality Indicator - TODO
+
+                case 5: // Field 5: E/W Indicator
+                    indicator = current_token[0]; // Get the E/W indicator (E or W)
+                    ESP_LOGI(TAG, "E/W Indicator: %c", indicator);
+                    Longitude = convert_coordinates_to_decimal_degrees(longitude_value_str, indicator);
+                    ESP_LOGI(TAG, "Longitude [degrees]: %f", Longitude);
                     break;
-                case 7: // Field 7: Number of Satellites - TODO
+
+                case 6: // Field 6: Quality Indicator
+                    /* Quality Indicator is a number that indicates the quality of the GPS fix.
+                       As per Flags in NMEA 4.10 and above, the values for GGA Quality Indicator are:
+                            - 0:    No position fix (at power-ip or after losing satellite lock)
+                            - 0:    Also possible with GNSS fix, but user limits exceeded
+                            - 1/2:  2D or 3D GNSS fix (2D fix means at least 3 satellites, 3D fix means at least 4 satellites)
+                            - 1/2:  Also possible with Combined GNSS or Dead Reckoning (DR) fix
+                            - 4:    RTK Fixed (Real-Time Kinematic) fix. RTK works by using two GNSS receivers: a base station at 
+                                        a precisely known, fixed location, and a rover receiver (mobile unit). It provides centimeter-level
+                                        accuracy (much better than DGNSS) by resolving the integer ambiguities of the carrier phase measurements 
+                                        of the satellite signals in real-time, using correction data transmitted from the base station to the rover.
+                            - 5:    RTK Float fix
+                            - 6:    Dead Reckoning (DR) fix. Dead Reckoning is a navigation method that estimates your current 
+                                        position by starting from a known position and calculating subsequent positions based on 
+                                        estimated changes in distance and direction, typically using internal sensors like accelerometers, 
+                                        gyroscopes, or odometers. It is commonly used to maintain navigation continuity in environments 
+                                        where GNSS (Global Navigation Satellite System) signals are unreliable or unavailable, 
+                                        such as tunnels, urban canyons, or indoors.
+                    */
+                    QualityIndicator = atoi(current_token); // Convert the quality indicator to an integer
+                    ESP_LOGI(TAG, "Quality Indicator: %d", QualityIndicator);
                     break;
-                case 8: // Field 8: HDOP - TODO
+
+                case 7: // Field 7: Number of Satellites
+                    /* Number of satellites used to calculate the position fix (0-12) */
+                    NumberOfSatellites = atoi(current_token); // Convert the number of satellites to an integer
+                    ESP_LOGI(TAG, "Number of Satellites: %d", NumberOfSatellites);
                     break;
+
+                case 8: // Field 8: HDOP
+                    /* Horizontal Dilution of Precision (HDOP) is a measure of the quality of the horizontal position fix.
+                       It indicates how much the position accuracy is affected by the geometry of the satellites used for the fix.
+                       Lower values indicate better satellite geometry and higher accuracy. */
+                    HorizontalDilutionOfPrecision = atof(current_token); // Convert HDOP to double
+                    ESP_LOGI(TAG, "Horizontal Dilution of Precision (HDOP): %f", HorizontalDilutionOfPrecision);
+                    break;
+
                 case 9: // Field 9: Altitude (Meters)
-                    if (strlen(current_token) > 0)
-                    {
-                        Altitude = atof(current_token);
-                        ESP_LOGI(TAG, "Altitude: %f", Altitude);
-                    }
+                    Altitude = atof(current_token);
+                    ESP_LOGI(TAG, "Altitude [m]: %f", Altitude);
                     break;
-                case 10: // Field 10: Altitude Unit (M) - This field is not needed for processing, just skip it
+
+                case 10: // Field 10: Altitude Unit (M)
+                    /* Altitude unit is always 'M' (meters) in GGA sentences, so we can skip this field */
                     break;
-                case 11: // Field 11: Geoidal Separation - TODO
+
+                case 11: // Field 11: Geoidal Separation
+                    /* Geoidal separation is the difference between the WGS-84 ellipsoid and the geoid (mean sea level).
+                       It is used to convert between ellipsoidal height (GPS altitude) and orthometric height (height above mean sea level).
+                       This field is optional in GGA sentences, so we can skip it if it's not present. */
+                    GeoidalSeparation = atof(current_token); // Convert geoidal separation to double
+                    ESP_LOGI(TAG, "Geoidal Separation [m]: %f", GeoidalSeparation);
                     break;
-                case 12: // Field 12: Geoidal Separation Unit (M) - This field is not needed for processing, just skip it
+
+                case 12: // Field 12: Geoidal Separation Unit (M)
+                    /* Geoidal separation unit is always 'M' (meters) in GGA sentences, so we can skip this field */
                     break;
-                case 13: // Field 13: Age of Diff. Corr. (seconds) - TODO
+
+                case 13: // Field 13: Age of Diff. Corr. (seconds)
+                    /* Age of Differential Correction is the time in seconds since the last differential correction was applied.
+                       It is used to determine how fresh the differential correction data is. If this field is empty, it means no differential correction is applied.
+                       This field is optional in GGA sentences */
+                    AgeOfDifferentialGPSData = atof(current_token); // Convert age of differential correction to double
+                    ESP_LOGI(TAG, "Age of Differential GPS Data [s]: %f", AgeOfDifferentialGPSData);
+                    /* Note: If this field is empty, it means no differential correction is applied */
                     break;
-                case 14: // Field 14: Diff. Ref. Station ID - TODO
+                    
+                case 14: // Field 14: Diff. Ref. Station ID
+                    /* Differential Reference Station ID is the ID of the reference station used for differential correction.
+                       It is used to identify the reference station that provided the differential correction data.
+                       This field is optional in GGA sentences */
+                    DifferentialReferenceStationID = atoi(current_token); // Convert differential reference station ID to integer
+                    ESP_LOGI(TAG, "Differential Reference Station ID: %d", DifferentialReferenceStationID);
+                    /* Note: If this field is empty, it means no differential correction is applied */
                     break;
 
                 default:
