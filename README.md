@@ -1,3 +1,20 @@
-# Moduri - wireless interconnected system for template-based modular embedded project development.
+# Wave Rover - Navigation App
 
-In normal words, this project aims to provide a well-capable already prepared platform to make it easier to start, develop, monitor, and control the actual application layer of your electronic projects.
+This application is part of the bigger project - the Wave Rover, a 4WD mobile robot with remote control, AI vision, navigation, various manipulators and more.
+
+This particular app implements the navigation part of the robot and runs on its own ESP32 board.
+
+## Hardware
+
+- **Microcontroller:** ESP-WROOM-32 (ESP32 Dev Kit V1 board)
+- **Sensors:** ublox NEO-M8N
+
+## Software and Framework
+
+- **Framework:** ESP-IDF (Espressif IoT Development Framework)
+- **Language:** C
+- **Operating System:** FreeRTOS (as part of ESP-IDF)
+
+## Functionalities
+
+... TODO ...
