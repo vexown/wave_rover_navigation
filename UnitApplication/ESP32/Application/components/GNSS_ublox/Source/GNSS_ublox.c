@@ -173,6 +173,25 @@ esp_err_t GNSS_ublox_init(void)
     return ESP_OK; 
 }
 
+esp_err_t GNSS_ublox_get_coordinates(double *latitude, double *longitude, double *altitude)
+{
+    /* Check if the pointers are valid */
+    if (latitude == NULL || longitude == NULL || altitude == NULL) 
+    {
+        ESP_LOGE(TAG, "Invalid pointers provided to GNSS_ublox_get_coordinates");
+        return ESP_ERR_INVALID_ARG; // Return error if any pointer is NULL
+    }
+
+    /* Return the extracted coordinates */
+    *latitude = Latitude;
+    *longitude = Longitude;
+    *altitude = Altitude;
+
+    ESP_LOGI(TAG, "Coordinates retrieved: Latitude: %f, Longitude: %f, Altitude: %f", Latitude, Longitude, Altitude);
+
+    return ESP_OK; // Return success
+}
+
 /*******************************************************************************/
 /*                     STATIC FUNCTION DEFINITIONS                             */
 /*******************************************************************************/

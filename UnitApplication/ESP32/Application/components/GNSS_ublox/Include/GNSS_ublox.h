@@ -97,4 +97,19 @@
  */
 esp_err_t GNSS_ublox_init(void);
 
+/**
+ * @brief Get the current coordinates from the GNSS ublox module.
+ * 
+ * This function provides to the user ALREADY EXTRACTED coordinates in decimal degrees format (latitude, longitude)
+ * and altitude in meters. The coordinates are being extracted continuously if the GNSS_ublox_init() function was called.
+ * 
+ * @param[out] latitude Pointer to store the latitude in decimal degrees.
+ * @param[out] longitude Pointer to store the longitude in decimal degrees.
+ * @param[out] altitude Pointer to store the altitude in meters.
+ * 
+ * @return esp_err_t ESP_OK on success. ESP_ERR_INVALID_ARG if any of the pointers are NULL.
+ * 
+ */
+esp_err_t GNSS_ublox_get_coordinates(double *latitude, double *longitude, double *altitude);
+
 #endif /* GNSS_UBLOX_H */
