@@ -36,6 +36,7 @@
 #include "esp_system.h"
 #include "Common.h"
 #include "GNSS_ublox.h"
+#include "NaviLogging.h"
 
 /*******************************************************************************/
 /*                                 MACROS                                      */
@@ -130,6 +131,12 @@ void app_main(void)
     {
         LOG("GNSS module initialization failed\n"); // for now just log it (TODO: handle it properly)
     }
+    /* Initialize the NaviLogging module */
+    if(NaviLogging_init() != ESP_OK) 
+    {
+        LOG("NaviLogging module initialization failed\n"); // for now just log it (TODO: handle it properly)
+    }
+    /***********************************************************************************/
 
     /* Task loop */
     while(1) 
