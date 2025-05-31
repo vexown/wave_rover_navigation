@@ -113,7 +113,7 @@ static void esp_now_send_callback(const uint8_t *mac_addr, esp_now_send_status_t
  * which sends data to all ESP-NOW devices in range. For unicast (one-to-one)
  * communication, replace it with the specific MAC address of the receiver.
  */
-static uint8_t receiver_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast address
+static uint8_t receiver_mac[ESP_NOW_ETH_ALEN] = {0xD8, 0x13, 0x2A, 0x2F, 0x3C, 0xE4}; // MAC address of the Wave Rover Driver ESP32 device
 
 /*******************************************************************************/
 /*                     GLOBAL FUNCTION DEFINITIONS                             */
