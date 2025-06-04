@@ -187,7 +187,8 @@ esp_err_t GNSS_ublox_get_coordinates(double *latitude, double *longitude, double
     *longitude = Longitude;
     *altitude = Altitude;
 
-    ESP_LOGI(TAG, "Coordinates retrieved: Latitude: %f, Longitude: %f, Altitude: %f", Latitude, Longitude, Altitude);
+    ESP_LOGI(TAG, "Coordinates retrieved: Lat: %.6f, Lon: %.6f, Alt: %.2f (Quality: %d, Sats: %d)", 
+             Latitude, Longitude, Altitude, QualityIndicator, NumberOfSatellites);
 
     return ESP_OK; // Return success
 }
