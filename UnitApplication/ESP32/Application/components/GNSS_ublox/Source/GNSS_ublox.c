@@ -193,6 +193,26 @@ esp_err_t GNSS_ublox_get_coordinates(double *latitude, double *longitude, double
     return ESP_OK; // Return success
 }
 
+esp_err_t GNSS_ublox_get_quality_info(int *quality_indicator, int *num_satellites, double *hdop)
+{
+    /* Check if the pointers are valid */
+    if (quality_indicator == NULL || num_satellites == NULL || hdop == NULL) 
+    {
+        ESP_LOGE(TAG, "Invalid pointers provided to GNSS_ublox_get_quality_info");
+        return ESP_ERR_INVALID_ARG; // Return error if any pointer is NULL
+    }
+
+    /* Return the extracted GPS quality information */
+    *quality_indicator = QualityIndicator;
+    *num_satellites = NumberOfSatellites;
+    *hdop = HorizontalDilutionOfPrecision;
+
+    ESP_LOGI(TAG, "GPS quality info retrieved: Quality: %d, Satellites: %d, HDOP: %.2f", 
+             QualityIndicator, NumberOfSatellites, HorizontalDilutionOfPrecision);
+
+    return ESP_OK; // Return success
+}
+
 /*******************************************************************************/
 /*                     STATIC FUNCTION DEFINITIONS                             */
 /*******************************************************************************/

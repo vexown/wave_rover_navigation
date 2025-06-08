@@ -258,6 +258,7 @@ static void navi_logging_task(void *pvParameters)
     /******************** Task Initialization ********************/
     navi_coordinates_type coordinates;
     esp_err_t status_ublox;
+    esp_err_t status_quality;
 
     ESP_LOGI(TAG, "NaviLogging task started");
 
@@ -269,7 +270,12 @@ static void navi_logging_task(void *pvParameters)
          * If it fails, it will return an error code which we can log. */
         status_ublox = GNSS_ublox_get_coordinates(&coordinates.latitude, &coordinates.longitude, &coordinates.altitude);
 
-        if (status_ublox == ESP_OK) 
+        /* Fetch GPS quality information from the GNSS_ublox component.
+         * This function will fill the coordinates structure with quality indicator, number of satellites, and HDOP.
+         * If it fails, it will return an error code which we can log. */
+        status_quality = GNSS_ublox_get_quality_info(&coordinates.quality_indicator, &coordinates.number_of_satellites, &coordinates.horizontal_dilution_of_precision);
+
+        if (status_ublox == ESP_OK && status_quality == ESP_OK) 
         {
             esp_err_t send_result = esp_now_send(receiver_mac, (uint8_t *)&coordinates, sizeof(navi_coordinates_type));
             if (send_result != ESP_OK) 
@@ -279,7 +285,14 @@ static void navi_logging_task(void *pvParameters)
         } 
         else 
         {
-            ESP_LOGE(TAG, "Failed to get coordinates: %s", esp_err_to_name(status_ublox));
+            if (status_ublox != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Failed to get coordinates: %s", esp_err_to_name(status_ublox));
+            }
+            if (status_quality != ESP_OK)
+            {
+                ESP_LOGE(TAG, "Failed to get GPS quality info: %s", esp_err_to_name(status_quality));
+            }
         }
 
         /* Delay for the defined interval before fetching and sending coordinates again */

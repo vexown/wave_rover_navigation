@@ -112,4 +112,21 @@ esp_err_t GNSS_ublox_init(void);
  */
 esp_err_t GNSS_ublox_get_coordinates(double *latitude, double *longitude, double *altitude);
 
+/**
+ * @brief Get the current GPS quality information from the GNSS ublox module.
+ * 
+ * This function provides additional GPS quality metrics that can be used to assess
+ * the reliability and accuracy of the position fix. The values are being extracted
+ * continuously if the GNSS_ublox_init() function was called.
+ * 
+ * @param[out] quality_indicator Pointer to store the quality indicator (0-6 scale).
+ *                               0 = No fix, 1/2 = 2D/3D fix, 3 = PPS fix, 4 = RTK fixed, etc.
+ * @param[out] num_satellites Pointer to store the number of satellites used in the fix (0-12+).
+ * @param[out] hdop Pointer to store the Horizontal Dilution of Precision.
+ *                  Lower values indicate better satellite geometry and higher accuracy.
+ * 
+ * @return esp_err_t ESP_OK on success. ESP_ERR_INVALID_ARG if any of the pointers are NULL.
+ */
+esp_err_t GNSS_ublox_get_quality_info(int *quality_indicator, int *num_satellites, double *hdop);
+
 #endif /* GNSS_UBLOX_H */
