@@ -38,7 +38,7 @@
 #define NAVILOGGING_SEND_INTERVAL_MS 1000 // Send data every 5 seconds
 
 /* ESP-NOW Configuration */
-#define ESPNOW_WIFI_CHANNEL 9 // Fixed channel for ESP-NOW communication (BASED ON WAVE ROVER DRIVER - CHECK IT ON THAT SIDE AND THEN SET THE SAME CHANNEL HERE)
+#define ESPNOW_WIFI_CHANNEL 6 // Fixed channel for ESP-NOW communication (BASED ON WAVE ROVER DRIVER - CHECK IT ON THAT SIDE AND THEN SET THE SAME CHANNEL HERE)
 
 /*******************************************************************************/
 /*                                DATA TYPES                                   */
